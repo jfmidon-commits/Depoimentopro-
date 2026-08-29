@@ -13,7 +13,8 @@ module.exports = async (req, res) => {
     const nome = String(b.nome || '').trim();
     if (nome.length < 2) return json(res, 400, { error:'Informe um nome para a campanha.' });
     const token = randomToken(24);
-    const base = String(process.env.APP_URL || '').replace(/\/$/, '');
+    const prod = process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '';
+    const base = String(process.env.APP_URL || prod).replace(/\/$/, '');
     const link = base ? `${base}/form?token=${encodeURIComponent(token)}` : `/form?token=${encodeURIComponent(token)}`;
     const record = await air.create(TABLES.campaigns, {
       'Nome': nome,
