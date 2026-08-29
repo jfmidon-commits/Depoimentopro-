@@ -1,6 +1,9 @@
 {
   "name": "depoimentopro-mvp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "engines": { "node": "24.x" }
+  "engines": { "node": "24.x" },
+  "scripts": {
+    "test": "node --test"
+  }
 }
