@@ -1,20 +1,29 @@
 const { TABLES } = require('../lib/config');
 const air = require('../lib/airtable');
-const { bodyJson, json, method } = require('../lib/http');
+const { bodyJson, json, method, clientIp } = require('../lib/http');
 const { hashPassword, setSession } = require('../lib/auth');
 const { findUserByEmail, publicUser } = require('../lib/user');
+const { allowRate, rateKey } = require('../lib/security');
 
 module.exports = async (req, res) => {
   if (!method(req, res, ['POST'])) return;
   try {
+    const ip = clientIp(req);
+    if (!allowRate(rateKey('signup-ip', ip), { limit: 5, windowMs: 15 * 60_000 })) {
+      res.setHeader('Retry-After', '900');
+      return json(res, 429, { error: 'Muitas tentativas de cadastro. Aguarde alguns minutos e tente novamente.' });
+    }
+
     const b = await bodyJson(req);
     const nome = String(b.nome || '').trim();
     const email = String(b.email || '').trim().toLowerCase();
     const password = String(b.password || '');
-    if (nome.length < 2) return json(res, 400, { error: 'Informe seu nome.' });
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json(res, 400, { error: 'E-mail inválido.' });
-    if (password.length < 8) return json(res, 400, { error: 'A senha precisa ter pelo menos 8 caracteres.' });
-    if (await findUserByEmail(email)) return json(res, 409, { error: 'Já existe uma conta com este e-mail.' });
+
+    if (nome.length < 2 || nome.length > 120) return json(res, 400, { error: 'Informe seu nome.' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return json(res, 400, { error: 'E-mail inválido.' });
+    if (password.length < 10 || password.length > 128) return json(res, 400, { error: 'A senha precisa ter entre 10 e 128 caracteres.' });
+    if (await findUserByEmail(email)) return json(res, 409, { error: 'Não foi possível criar a conta com este e-mail.' });
+
     const record = await air.create(TABLES.users, {
       'Nome': nome,
       'Email': email,
