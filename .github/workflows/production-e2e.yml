@@ -1,0 +1,40 @@
+name: Production E2E smoke
+
+on:
+  push:
+    branches:
+      - test/production-e2e
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Syntax check
+        shell: bash
+        run: |
+          set -euo pipefail
+          find api lib test -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+          for f in auth.js dashboard.js form.js pwa.js sw.js; do
+            node --check "$f"
+          done
+
+      - name: Production E2E
+        env:
+          BASE_URL: https://depoimentopro-app.vercel.app
+        run: bash scripts/e2e-production.sh
