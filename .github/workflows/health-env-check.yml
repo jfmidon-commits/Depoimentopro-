@@ -1,0 +1,15 @@
+name: Health env check
+
+on:
+  push:
+    branches:
+      - smoke/health-env-check
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query production health
+        run: |
+          echo 'Consultando health de produção...'
+          curl -sS -i https://depoimentopro-app.vercel.app/api/health
