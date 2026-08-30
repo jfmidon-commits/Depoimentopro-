@@ -8,6 +8,11 @@ const validate=require('../lib/validate');
 
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
+function requestAction(req){
+  try{return String(new URL(String(req.url||'/api/moderate'),'https://depoimentopro.invalid').searchParams.get('action')||'').toLowerCase();}
+  catch{return '';}
+}
+
 async function deleteTestimonial(record,id,userId){
   const campaignId=record.fields?.['Campaign']?.[0]||null;
   await air.remove(TABLES.testimonials,id);
@@ -46,7 +51,7 @@ module.exports=async(req,res)=>{
     const owners=record.fields?.['User']||[];
     if(!owners.includes(s.userId))return json(res,403,{error:'Sem permissão para este depoimento.'});
 
-    if(b.action==='delete'){
+    if(b.action==='delete'||requestAction(req)==='delete'){
       await deleteTestimonial(record,id,s.userId);
       return json(res,200,{ok:true,deleted:true});
     }
