@@ -10,7 +10,7 @@ const {
   ensureRequestId,
 } = require('../lib/http');
 const { readSession } = require('../lib/auth');
-const { paidPlanKey } = require('../lib/plans');
+const { paidPlanKey, canStartCheckout } = require('../lib/plans');
 const stripe = require('../lib/stripe');
 const { processStripeEvent } = require('../lib/billing-webhook');
 const { LIMITS, checkRateLimit, rejectRateLimit, setRateLimitHeaders } = require('../lib/rate-limit');
@@ -39,6 +39,11 @@ async function sessionUser(req, res) {
   return { session, user };
 }
 
+async function verifiedCustomer(customerId, userId) {
+  const customer = await stripe.retrieveCustomer(customerId);
+  return stripe.customerOwnedByUser(customer, userId) ? customer : null;
+}
+
 async function checkout(req, res, requestId) {
   if (!method(req, res, ['POST']) || !requireSameOrigin(req, res)) return;
   const current = await sessionUser(req, res);
@@ -57,8 +62,20 @@ async function checkout(req, res, requestId) {
 
   stripe.requireCheckoutConfig(planKey);
   const fields = current.user.fields || {};
+  if (!canStartCheckout(fields)) {
+    return json(res, 409, {
+      error: 'Já existe uma assinatura Stripe vinculada. Use “Gerenciar assinatura” para alterar o plano ou a forma de pagamento.',
+    });
+  }
+
   let customerId = String(fields['Stripe Customer ID'] || '').trim();
-  if (!customerId) {
+  if (customerId) {
+    const customer = await verifiedCustomer(customerId, current.user.id);
+    if (!customer) {
+      log('warn', 'billing.customer_ownership_mismatch', { requestId, userId: current.user.id });
+      return json(res, 409, { error: 'A conta de cobrança vinculada precisa ser revisada antes de iniciar um novo checkout.' });
+    }
+  } else {
     const customer = await stripe.createCustomer({
       userId: current.user.id,
       email: fields.Email || '',
@@ -91,6 +108,11 @@ async function portal(req, res, requestId) {
   stripe.requirePortalConfig();
   const customerId = String(current.user.fields?.['Stripe Customer ID'] || '').trim();
   if (!customerId) return json(res, 409, { error: 'Nenhuma conta de cobrança foi vinculada a este usuário.' });
+  const customer = await verifiedCustomer(customerId, current.user.id);
+  if (!customer) {
+    log('warn', 'billing.portal_customer_ownership_mismatch', { requestId, userId: current.user.id });
+    return json(res, 409, { error: 'A conta de cobrança vinculada não corresponde a este usuário.' });
+  }
   const session = await stripe.createPortalSession(customerId);
   if (!session?.url) throw new Error('Stripe não retornou URL do portal.');
   log('info', 'billing.portal_created', { requestId, userId: current.user.id });
@@ -115,6 +137,10 @@ async function webhook(req, res, requestId) {
   let event;
   try { event = JSON.parse(raw.toString('utf8')); }
   catch { return json(res, 400, { error: 'Payload do webhook inválido.' }); }
+  if (!stripe.eventMatchesConfiguredMode(event)) {
+    log('warn', 'billing.webhook_mode_mismatch', { requestId, eventType: event?.type || '' });
+    return json(res, 400, { error: 'Modo do evento Stripe incompatível com a configuração atual.' });
+  }
   log('info', 'billing.webhook_received', { requestId, eventId: event.id, eventType: event.type });
   const result = await processStripeEvent(event);
   return json(res, 200, { received: true, duplicate: Boolean(result.duplicate) });
