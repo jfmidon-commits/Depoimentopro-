@@ -49,7 +49,7 @@ done
 
 echo '2/12 Cadastro e sessão'
 body="$(jq -nc --arg nome 'E2E Automático' --arg email "$EMAIL" --arg password "$PASSWORD" '{nome:$nome,email:$email,password:$password}')"
-code="$(request_json POST "$BASE_URL/api/signup" "$body" save)"
+code="$(request_json POST "$BASE_URL/api/signup" "$body" save same)"
 expect_status "$code" 201 signup
 jq -e '.user.email' /tmp/dpro-response.json >/dev/null
 
