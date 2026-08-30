@@ -43,6 +43,7 @@ const CAMPAIGN = 'rec' + 'C'.repeat(14);
 function request(body) {
   return {
     method: 'POST',
+    url: '/api/moderate?action=delete',
     headers: {
       host: 'depoimentopro-app.vercel.app',
       origin: 'https://depoimentopro-app.vercel.app',
@@ -58,7 +59,7 @@ test('usuário não pode excluir depoimento de outro proprietário', async () =>
     remove: async () => { removed = true; },
   };
   const auth = { readSession: () => ({ userId: USER }) };
-  const { handler, restore } = loadHandler('../api/testimonial-delete', {
+  const { handler, restore } = loadHandler('../api/moderate', {
     '../lib/airtable': air,
     '../lib/auth': auth,
   });
@@ -87,7 +88,7 @@ test('exclusão própria remove registro e reconcilia usuário e campanha', asyn
     update: async (table, id, fields) => { updates.push({ table, id, fields }); },
   };
   const auth = { readSession: () => ({ userId: USER }) };
-  const { handler, restore } = loadHandler('../api/testimonial-delete', {
+  const { handler, restore } = loadHandler('../api/moderate', {
     '../lib/airtable': air,
     '../lib/auth': auth,
   });
