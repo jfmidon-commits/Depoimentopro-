@@ -61,6 +61,7 @@ async function checkout(req, res, requestId) {
   if (!planKey) return json(res, 400, { error: 'Plano inválido.' });
 
   stripe.requireCheckoutConfig(planKey);
+  stripe.requireWebhookConfig();
   const fields = current.user.fields || {};
   if (!canStartCheckout(fields)) {
     return json(res, 409, {
