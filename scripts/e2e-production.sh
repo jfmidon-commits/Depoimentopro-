@@ -92,9 +92,13 @@ expect_status "$code" 200 moderate-approve
 
 echo '8/12 Criação/obtenção do widget'
 code="$(request_json POST "$BASE_URL/api/widgets" '{}' send same)"
-expect_status "$code" 200 widget-create
-WIDGET_TOKEN="$(jq -r '.widget.token' /tmp/dpro-response.json)"
-[[ ${#WIDGET_TOKEN} -ge 24 ]] || { echo 'FAIL token de widget ausente'; exit 1; }
+if [[ "$code" != "200" && "$code" != "201" ]]; then
+  echo "FAIL [widget-create] esperado HTTP 200 ou 201, recebido $code"
+  cat /tmp/dpro-response.json || true
+  exit 1
+fi
+WIDGET_TOKEN="$(jq -r '.widget.token // empty' /tmp/dpro-response.json)"
+[[ ${#WIDGET_TOKEN} -ge 24 ]] || { echo 'FAIL token de widget ausente'; cat /tmp/dpro-response.json; exit 1; }
 
 echo '9/12 Widget publica aprovado + consentido'
 WIDGET_URL="$BASE_URL/widget?token=$WIDGET_TOKEN"
