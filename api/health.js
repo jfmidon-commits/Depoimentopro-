@@ -4,24 +4,24 @@ const { json, method } = require('../lib/http');
 module.exports = async (req, res) => {
   if (!method(req, res, ['GET'])) return;
 
-  const missing = [];
-  try { requireAirtable(); } catch { missing.push('AIRTABLE_TOKEN'); }
-  try { requireSessionSecret(); } catch { missing.push('SESSION_SECRET'); }
-
   const commit = String(process.env.VERCEL_GIT_COMMIT_SHA || '').trim();
+  const version = commit ? commit.slice(0, 12) : 'unknown';
 
-  if (missing.length) {
+  try {
+    requireAirtable();
+    requireSessionSecret();
+  } catch (error) {
+    console.error('health-config', error?.message || error);
     return json(res, 503, {
       ok: false,
       service: 'depoimentopro',
-      missing,
-      version: commit ? commit.slice(0, 12) : 'unknown',
+      version,
     });
   }
 
   return json(res, 200, {
     ok: true,
     service: 'depoimentopro',
-    version: commit ? commit.slice(0, 12) : 'unknown',
+    version,
   });
 };
