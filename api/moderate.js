@@ -1,2 +1,43 @@
-const {TABLES}=require('../lib/config');const air=require('../lib/airtable');const {bodyJson,json,method,requireSameOrigin}=require('../lib/http');const {readSession}=require('../lib/auth');const validate=require('../lib/validate');
-module.exports=async(req,res)=>{if(!method(req,res,['POST'])||!requireSameOrigin(req,res))return;try{const s=readSession(req);if(!s)return json(res,401,{error:'Sessão inválida.'});const b=await bodyJson(req);let id;try{id=validate.recordId(b.testimonialId,'Depoimento');}catch(e){return json(res,400,{error:e.message});}const withdrawConsent=b.withdrawConsent===true;let status='';if(!withdrawConsent){try{status=validate.moderationStatus(b.status);}catch(e){return json(res,400,{error:e.message});}}const record=await air.get(TABLES.testimonials,id);const owners=record.fields?.['User']||[];if(!owners.includes(s.userId))return json(res,403,{error:'Sem permissão para este depoimento.'});const now=new Date().toISOString();const fields={'Moderado Em':now,'Moderado Por':s.userId};if(withdrawConsent){fields['Consentimento Publicacao']=false;}else{fields['Status']=status;fields['Aprovado Em']=status==='Aprovado'?now:null;}await air.update(TABLES.testimonials,id,fields);return json(res,200,{ok:true,status:status||record.fields?.['Status']||'',consentimento:!withdrawConsent});}catch(e){console.error('moderate',e);return json(res,500,{error:'Não foi possível moderar o depoimento.'});}};
+const {TABLES}=require('../lib/config');
+const air=require('../lib/airtable');
+const {bodyJson,json,method,requireSameOrigin,ensureRequestId}=require('../lib/http');
+const {readSession}=require('../lib/auth');
+const {LIMITS,checkRateLimit,rejectRateLimit,setRateLimitHeaders}=require('../lib/rate-limit');
+const {logError}=require('../lib/logger');
+const validate=require('../lib/validate');
+
+module.exports=async(req,res)=>{
+  const requestId=ensureRequestId(req,res);
+  if(!method(req,res,['POST'])||!requireSameOrigin(req,res))return;
+  try{
+    const s=readSession(req);
+    if(!s)return json(res,401,{error:'Sessão inválida.'});
+    const rate=await checkRateLimit({...LIMITS.moderationUser,identity:s.userId});
+    setRateLimitHeaders(res,rate);
+    if(!rate.allowed)return rejectRateLimit(res,rate,'Muitas ações de moderação em pouco tempo. Aguarde um instante.');
+
+    const b=await bodyJson(req);
+    let id;
+    try{id=validate.recordId(b.testimonialId,'Depoimento');}
+    catch(e){return json(res,400,{error:e.message});}
+    const withdrawConsent=b.withdrawConsent===true;
+    let status='';
+    if(!withdrawConsent){
+      try{status=validate.moderationStatus(b.status);}
+      catch(e){return json(res,400,{error:e.message});}
+    }
+
+    const record=await air.get(TABLES.testimonials,id);
+    const owners=record.fields?.['User']||[];
+    if(!owners.includes(s.userId))return json(res,403,{error:'Sem permissão para este depoimento.'});
+    const now=new Date().toISOString();
+    const fields={'Moderado Em':now,'Moderado Por':s.userId};
+    if(withdrawConsent){fields['Consentimento Publicacao']=false;}
+    else{fields['Status']=status;fields['Aprovado Em']=status==='Aprovado'?now:null;}
+    await air.update(TABLES.testimonials,id,fields);
+    return json(res,200,{ok:true,status:status||record.fields?.['Status']||'',consentimento:!withdrawConsent});
+  }catch(e){
+    logError('moderate.failed',e,{requestId,route:'/api/moderate'});
+    return json(res,500,{error:'Não foi possível moderar o depoimento.'});
+  }
+};
