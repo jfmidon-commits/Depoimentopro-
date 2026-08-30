@@ -3,6 +3,7 @@ const air=require('../lib/airtable');
 const {bodyJson,json,method,clientIp,ensureRequestId}=require('../lib/http');
 const {LIMITS,checkRateLimit,rejectRateLimit,setRateLimitHeaders}=require('../lib/rate-limit');
 const {logError}=require('../lib/logger');
+const {canAcceptTestimonial}=require('../lib/plans');
 const validate=require('../lib/validate');
 const {verifyTurnstile}=require('../lib/turnstile');
 
@@ -35,11 +36,11 @@ module.exports=async(req,res)=>{
 
     const user=await air.get(TABLES.users,userId);
     const uf=user.fields||{};
-    const plan=uf['Plano']||'Free';
-    const limit=Number(uf['Limite Depoimentos']||0);
     const linkedBefore=Array.isArray(uf['Testimonials'])?uf['Testimonials']:[];
     const used=Math.max(Number(uf['Depoimentos Usados']||0),linkedBefore.length);
-    if(plan!=='Pro'&&used>=limit)return json(res,403,{error:'Esta campanha atingiu o limite do plano atual.'});
+    const ent=canAcceptTestimonial({...uf,'Depoimentos Usados':used});
+    const limit=ent.limit;
+    if(!ent.canAccept)return json(res,403,{error:'Esta campanha atingiu o limite do plano atual.'});
 
     const record=await air.create(TABLES.testimonials,{
       'Nome Cliente':input.nomeCliente,
@@ -54,11 +55,11 @@ module.exports=async(req,res)=>{
     });
 
     let finalUsed=used+1;
-    if(plan!=='Pro'){
+    if(limit!==null){
       await sleep(200);
       const refreshedUser=await air.get(TABLES.users,userId);
       const linked=Array.isArray(refreshedUser.fields?.['Testimonials'])?refreshedUser.fields['Testimonials']:[];
-      const records=await air.getMany(TABLES.testimonials,linked,100);
+      const records=await air.getMany(TABLES.testimonials,linked,Math.max(100,limit));
       records.sort(testimonialOrder);
       const allowed=new Set(records.slice(0,limit).map(r=>r.id));
       if(!allowed.has(record.id)){
