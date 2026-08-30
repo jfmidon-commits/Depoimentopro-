@@ -86,7 +86,7 @@ test('lock usa SET NX no Upstash e release protegido por token',async()=>{
     if(command[0]==='SET'){
       if(!heldToken){heldToken=command[2];result='OK';}
     }else if(command[0]==='EVAL'){
-      if(command[5]===heldToken){heldToken='';result=1;}else result=0;
+      if(command[4]===heldToken){heldToken='';result=1;}else result=0;
     }
     return{ok:true,status:200,json:async()=>({result})};
   };
