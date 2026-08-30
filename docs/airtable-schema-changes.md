@@ -11,4 +11,23 @@ Campos já existentes e usados pelo fluxo: `Consentimento Publicacao`, `Aprovado
 ## Widgets
 - `Public Token` — Single line text. Token opaco público do embed. O endpoint público não usa record IDs do Airtable como autorização.
 
-Não dependa de field IDs fixos para esses campos novos. O código usa os nomes dos campos.
+## Users — billing
+`Stripe Customer ID` já existia antes desta etapa.
+
+Campos aplicados para billing readiness:
+- `Stripe Subscription ID` — Single line text. ID `sub_...` da assinatura.
+- `Subscription Status` — Single line text. Estado Stripe (`active`, `trialing`, `past_due`, etc.).
+- `Current Period End` — Single line text com timestamp ISO 8601 UTC.
+- `Billing Grace Until` — Single line text com timestamp ISO 8601 UTC para tolerância de `past_due`.
+
+## StripeEvents
+Tabela criada para idempotência/auditoria mínima de webhooks.
+- `Event ID` — Single line text, campo primário.
+- `Type` — Single line text.
+- `Processed At` — Single line text ISO 8601 UTC.
+- `Status` — Single line text (`processed` ou `error`).
+- `Error` — Long text, sem secrets.
+
+O código usa o ID real da tabela `StripeEvents` em `lib/config.js` e nomes de campos para escrita/leitura. Nenhum secret é armazenado no Airtable.
+
+Airtable não garante unicidade nem transações; para maior volume pago, eventos/entitlements/contadores devem migrar gradualmente para armazenamento transacional.
