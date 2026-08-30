@@ -9,6 +9,9 @@
     { "source": "/dashboard", "destination": "/dashboard.html" },
     { "source": "/form", "destination": "/form.html" },
     { "source": "/widget", "destination": "/api/widget" },
+    { "source": "/api/billing-checkout", "destination": "/api/billing?action=checkout" },
+    { "source": "/api/billing-portal", "destination": "/api/billing?action=portal" },
+    { "source": "/api/billing-webhook", "destination": "/api/billing?action=webhook" },
     { "source": "/privacidade", "destination": "/privacidade.html" },
     { "source": "/termos", "destination": "/termos.html" }
   ],
