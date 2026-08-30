@@ -61,7 +61,6 @@ async function checkout(req, res, requestId) {
   if (!planKey) return json(res, 400, { error: 'Plano inválido.' });
 
   stripe.requireCheckoutConfig(planKey);
-  stripe.requireWebhookConfig();
   const fields = current.user.fields || {};
   if (!canStartCheckout(fields)) {
     return json(res, 409, {
@@ -76,7 +75,12 @@ async function checkout(req, res, requestId) {
       log('warn', 'billing.customer_ownership_mismatch', { requestId, userId: current.user.id });
       return json(res, 409, { error: 'A conta de cobrança vinculada precisa ser revisada antes de iniciar um novo checkout.' });
     }
-  } else {
+  }
+
+  // Não criamos Customer nem Checkout sem um webhook capaz de confirmar entitlement.
+  stripe.requireWebhookConfig();
+
+  if (!customerId) {
     const customer = await stripe.createCustomer({
       userId: current.user.id,
       email: fields.Email || '',
