@@ -13,6 +13,13 @@
     el.className = 'message billing-message ' + (ok ? 'success' : 'error');
   }
 
+  function fmtDate(value) {
+    const date = new Date(value || '');
+    return Number.isFinite(date.getTime())
+      ? date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      : '';
+  }
+
   async function api(url, options = {}) {
     const response = await fetch(url, {
       ...options,
@@ -70,7 +77,7 @@
     }
   }
 
-  function planCard({ title, price, detail, current, planKey, available, mode }) {
+  function planCard({ title, price, detail, current, planKey, available, mode, canCheckout, managed }) {
     const card = document.createElement('div');
     card.className = 'billing-plan' + (current ? ' current' : '');
     const h3 = document.createElement('h3');
@@ -83,17 +90,37 @@
     p.textContent = detail;
     card.append(h3, priceEl, p);
     if (!current) {
-      const label = available ? (mode === 'test' ? 'Testar upgrade' : `Escolher ${title}`) : 'Em preparação';
-      const btn = button(label, 'btn btn-primary', event => openCheckout(planKey, event.currentTarget), !available);
-      card.appendChild(btn);
+      if (managed && !canCheckout) {
+        card.appendChild(button('Alterar no portal', 'btn btn-light', event => openPortal(event.currentTarget), !available));
+      } else {
+        const label = available ? (mode === 'test' ? 'Testar assinatura' : `Escolher ${title}`) : 'Em preparação';
+        card.appendChild(button(label, 'btn btn-primary', event => openCheckout(planKey, event.currentTarget), !available || !canCheckout));
+      }
     }
     return card;
+  }
+
+  function subscriptionMessage(user) {
+    const billing = user.billing || {};
+    const status = String(billing.status || '').toLowerCase();
+    const period = fmtDate(billing.currentPeriodEnd);
+    const grace = fmtDate(billing.graceUntil);
+    if (!billing.managed) return 'Sem assinatura paga ativa.';
+    if (billing.cancelAtPeriodEnd && period) return `Cancelamento agendado. O acesso atual continua até ${period}.`;
+    if (status === 'past_due') return grace ? `Pagamento pendente. Período de tolerância até ${grace}.` : 'Pagamento pendente. Atualize a forma de pagamento no portal.';
+    if (status === 'active') return period ? `Assinatura ativa · período atual até ${period}.` : 'Assinatura ativa.';
+    if (status === 'trialing') return period ? `Período de teste ativo · até ${period}.` : 'Período de teste ativo.';
+    if (status === 'incomplete') return 'Assinatura aguardando conclusão do primeiro pagamento.';
+    if (status === 'paused') return 'Assinatura pausada. Use o portal para regularizar ou retomar.';
+    if (status === 'canceled' || status === 'unpaid' || status === 'incomplete_expired') return 'Assinatura sem acesso pago ativo.';
+    return status ? `Assinatura: ${status}.` : 'Assinatura vinculada aguardando confirmação do Stripe.';
   }
 
   function render(data) {
     root.textContent = '';
     const user = data.user || {};
     const billing = data.billing || {};
+    const userBilling = user.billing || {};
     const status = document.createElement('div');
     status.className = 'billing-status';
     const badge = document.createElement('span');
@@ -101,13 +128,12 @@
     badge.textContent = `Plano ${user.plano || 'Free'}`;
     const info = document.createElement('span');
     info.className = 'small muted';
-    const subscriptionStatus = user.billing?.status;
-    info.textContent = subscriptionStatus
-      ? `Assinatura: ${subscriptionStatus}${user.billing?.graceUntil ? ' · tolerância ativa quando aplicável' : ''}`
-      : 'Sem assinatura paga ativa.';
+    info.textContent = subscriptionMessage(user);
     status.append(badge, info);
     root.appendChild(status);
 
+    const canCheckout = userBilling.canStartCheckout !== false;
+    const managed = Boolean(userBilling.managed);
     const grid = document.createElement('div');
     grid.className = 'billing-grid';
     grid.appendChild(planCard({
@@ -118,6 +144,8 @@
       planKey: 'starter',
       available: Boolean(billing.available),
       mode: billing.mode,
+      canCheckout,
+      managed,
     }));
     grid.appendChild(planCard({
       title: 'Pro',
@@ -127,10 +155,12 @@
       planKey: 'pro',
       available: Boolean(billing.available),
       mode: billing.mode,
+      canCheckout,
+      managed,
     }));
     root.appendChild(grid);
 
-    if ((user.planoKey === 'starter' || user.planoKey === 'pro') && user.billing?.hasStripeCustomer) {
+    if (userBilling.hasStripeCustomer) {
       const actions = document.createElement('div');
       actions.className = 'billing-actions';
       actions.style.marginTop = '12px';

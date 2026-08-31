@@ -1,10 +1,11 @@
 {
   "name":"depoimentopro-mvp",
-  "version":"0.4.0",
+  "version":"0.5.0",
   "private":true,
   "engines":{"node":"24.x"},
   "scripts":{
     "test":"node --test test/*.test.js",
-    "backup":"node scripts/backup-airtable.js"
+    "backup":"node scripts/backup-airtable.js",
+    "stripe-smoke":"node scripts/stripe-smoke-test.js"
   }
 }
